@@ -17,10 +17,26 @@ services:
       POSTGRES_PASSWORD: example
     volumes:
       - ./db/init.sql:/docker-entrypoint-initdb.d/create_tables.sql
+    networks:
+      - db
 
   adminer:
     image: adminer
     restart: always
     ports:
       - 8080:8080
+    networks:
+      - db
+
+  redis:
+    image: redis
+    restart: always
+    ports:
+      - '6379:6379'
+    networks:
+      - redis
+
+networks:
+  db:
+  redis:
 
