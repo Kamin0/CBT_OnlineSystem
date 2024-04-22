@@ -36,6 +36,16 @@ services:
     networks:
       - redis
 
+#Add an api service to the compose.yaml file with the image build from the rust project in the api folder
+  api:
+    build: ./api
+    restart: always
+    ports:
+      - '8000:8000'
+    networks:
+      - db
+      - redis
+
 networks:
   db:
   redis:
