@@ -1,6 +1,6 @@
 // main.rs
 use actix_web::{web, App, HttpServer};
-use std::env;
+use std::{env, io};
 use actix_web::web::Data;
 use diesel::pg::PgConnection;
 use diesel::r2d2::{self, ConnectionManager};
@@ -25,12 +25,19 @@ async fn main() -> std::io::Result<()> {
         .build(manager)
         .expect("Failed to create pool.");
 
+    let redis_url = env::var("REDIS_URL").expect("REDIS_URL must be set");
+    let client = redis::Client::open(redis_url).map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+    let redis_data = web::Data::new(client);
+
     HttpServer::new(move || {
         App::new()
             .app_data(Data::new(pool.clone()))
+            .app_data(redis_data.clone())
             .route("/hello", web::get().to(handlers::hello))
             .route("/register", web::post().to(handlers::register_user))
             .route("/login", web::post().to(handlers::login_user))
+            .route("/session", web::get().to(handlers::request_session))
+            .route("/session", web::post().to(handlers::register_session))
     })
         .bind("0.0.0.0:8000")?
         .run()

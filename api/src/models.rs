@@ -27,3 +27,9 @@ pub struct LoginUser {
     pub username: String,
     pub password: String,
 }
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Session {
+    server_address: String,
+    players: Vec<String>,
+}
