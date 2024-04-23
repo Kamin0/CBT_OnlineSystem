@@ -18,6 +18,6 @@ INSERT INTO roles (name) VALUES ('server');
 INSERT INTO roles (name) VALUES ('client');
 
 INSERT INTO users (username, email, password, salt, role_id)
-VALUES ('server', 'server@uqac.ca', 'hashed_password', 'salt_value', (SELECT id FROM roles WHERE name = 'server'));
+VALUES ('server', 'server@uqac.ca', '$2y$12$zcm/bCwARboBGYvyTm.89u9G2qhqZL4Bm3ZKMkCI5G59P1/hS1geC', 'd5ea01744c824dda8321ac7456803eff', (SELECT id FROM roles WHERE name = 'server'));
 
 
