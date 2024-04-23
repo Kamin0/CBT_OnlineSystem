@@ -14,6 +14,19 @@ CREATE TABLE users (
     role_id UUID REFERENCES roles(id)
 );
 
+CREATE TABLE achievements (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name VARCHAR(255) NOT NULL,
+    description TEXT,
+    image_url VARCHAR(255)
+);
+
+CREATE TABLE user_achievements (
+    user_id UUID REFERENCES users(id),
+    achievement_id UUID REFERENCES achievements(id),
+    PRIMARY KEY (user_id, achievement_id)
+);
+
 INSERT INTO roles (name) VALUES ('server');
 INSERT INTO roles (name) VALUES ('client');
 
