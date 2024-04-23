@@ -32,7 +32,7 @@ async fn main() -> std::io::Result<()> {
             .route("/register", web::post().to(handlers::register_user))
             .route("/login", web::post().to(handlers::login_user))
     })
-        .bind("127.0.0.1:8000")?
+        .bind("0.0.0.0:8000")?
         .run()
         .await
 }

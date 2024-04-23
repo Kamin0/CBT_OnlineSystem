@@ -15,6 +15,7 @@ CREATE TABLE users (
 );
 
 INSERT INTO roles (name) VALUES ('server');
+INSERT INTO roles (name) VALUES ('client');
 
 INSERT INTO users (username, email, password, salt, role_id)
 VALUES ('server', 'server@uqac.ca', 'hashed_password', 'salt_value', (SELECT id FROM roles WHERE name = 'server'));
