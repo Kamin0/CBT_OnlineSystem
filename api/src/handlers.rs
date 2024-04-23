@@ -1,6 +1,7 @@
 use actix_web::{HttpRequest, HttpResponse, web};
 use actix_web::web::Data;
 use bcrypt::{DEFAULT_COST, hash_with_salt, verify};
+use chrono::{Duration, Utc};
 use diesel::{PgConnection, QueryDsl, r2d2, RunQueryDsl};
 use diesel::prelude::*;
 use diesel::r2d2::ConnectionManager;
@@ -9,10 +10,9 @@ use rand::random;
 use redis::{AsyncCommands, Client, RedisError};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use chrono::{Utc, Duration};
 
-use crate::models::{LoginUser, NewUser, Session, User};
-use crate::schema::{roles, users};
+use crate::models::{AchievementValidation, LoginUser, NewUser, Session, User, UserAchievement};
+use crate::schema::{roles, user_achievements, users};
 
 #[derive(Debug, Serialize, Deserialize)]
 struct Claims {
@@ -70,6 +70,49 @@ pub async fn register_user(user_data: web::Json<NewUser>, pool:Data<DbPool>) -> 
     HttpResponse::Ok().body("User registered successfully")
 }
 
+pub async fn validate_achievement(user_data: web::Json<AchievementValidation>, pool:Data<DbPool>, http_request: HttpRequest) -> HttpResponse {
+    //Validate the JWT token
+    let token_validation = validate_token(http_request, "server".to_string());
+    //Switch on the token validation result
+    match token_validation {
+        0 => {
+            // Extract user data from request
+            let user_data = user_data.into_inner();
+
+            // Establish a database connection
+            let mut conn = pool.get().expect("Couldn't get db connection from pool");
+
+            // Check if user exists
+            let user_id: Uuid = match users::table
+                .select(users::id)
+                .filter(users::username.eq(&user_data.username))
+                .first(&mut conn)
+            {
+                Ok(id) => id,
+                Err(_) => {
+                    return HttpResponse::BadRequest().body("Invalid username");
+                }
+            };
+
+            let user_achievement = UserAchievement {
+                user_id,
+                achievement_id: user_data.achievement_id,
+            };
+
+            diesel::insert_into(user_achievements::table)
+                .values(&user_achievement)
+                .execute(&mut conn)
+                .expect("Error inserting user achievement into database");
+
+            HttpResponse::Ok().body("Achievement validated successfully")
+        }
+        1 => HttpResponse::Unauthorized().body("Unauthorized"),
+        2 => HttpResponse::Forbidden().body("Permission denied"),
+        _ => HttpResponse::InternalServerError().body("Internal Server Error"),
+    }
+
+}
+
 pub async fn login_user(user_data: web::Json<LoginUser>, pool:Data<DbPool>) -> HttpResponse {
     let user_data = user_data.into_inner();
 
@@ -122,40 +165,25 @@ pub async fn register_session(
     session: web::Json<Session>,
     redis: Data<Client>
 ) -> HttpResponse {
-    // Extract user id from JWT token
-    let token = req
-        .headers()
-        .get(actix_web::http::header::AUTHORIZATION)
-        .unwrap()
-        .to_str()
-        .unwrap();
-    let token_data = decode::<Claims>(
-        &token,
-        &DecodingKey::from_secret("secret".as_ref()),
-        &Validation::new(Algorithm::HS256),
-    );
-
-    match token_data {
-        Ok(claims) => {
-            // Check if user has permission to register session
-            //TODO : check expiration time
-            if claims.claims.role == "server" {
-                // Create connection to Redis
-                match redis.get_ref().get_multiplexed_async_connection().await {
-                    Ok(mut con) => {
-                        // Store session data in Redis
-                        let _: Result<(), RedisError> = con
-                            .set("session", serde_json::to_string(&session.into_inner()).unwrap())
-                            .await;
-                        HttpResponse::Ok().body("Session registered successfully")
-                    }
-                    Err(_) => HttpResponse::InternalServerError().body("Failed to connect to Redis"),
+    // Extract JWT token from request headers
+    let token_validation = validate_token(req, "server".to_string());
+    //Switch on the token validation result
+    match token_validation {
+        0 => {
+            match redis.get_ref().get_multiplexed_async_connection().await {
+                Ok(mut con) => {
+                    // Store session data in Redis
+                    let _: Result<(), RedisError> = con
+                        .set("session", serde_json::to_string(&session.into_inner()).unwrap())
+                        .await;
+                    HttpResponse::Ok().body("Session registered successfully")
                 }
-            } else {
-                HttpResponse::Forbidden().body("Permission denied")
+                Err(_) => HttpResponse::InternalServerError().body("Failed to connect to Redis"),
             }
         }
-        Err(_) => HttpResponse::Unauthorized().body("Unauthorized"),
+        1 => HttpResponse::Unauthorized().body("Unauthorized"),
+        2 => HttpResponse::Forbidden().body("Permission denied"),
+        _ => HttpResponse::InternalServerError().body("Internal Server Error"),
     }
 }
 
@@ -164,42 +192,53 @@ pub(crate) async fn request_session(
     redis: web::Data<Client>,
 ) -> HttpResponse {
     // Extract JWT token from request headers
+    let token_validation = validate_token(req, "client".to_string());
+    //Switch on the token validation result
+    match token_validation {
+        0 => {
+            // Create connection to Redis
+            match redis.get_ref().get_multiplexed_async_connection().await {
+                Ok(mut con) => {
+                    // Retrieve session data from Redis
+                    let session_data: Result<String, RedisError> = con.get("session").await;
+                    match session_data {
+                        Ok(data) => {
+                            let session: Session = serde_json::from_str(&data).unwrap();
+                            HttpResponse::Ok().json(session)
+                        }
+                        Err(_) => HttpResponse::NotFound().body("Session not found"),
+                    }
+                }
+                Err(_) => HttpResponse::InternalServerError().body("Failed to connect to Redis"),
+            }
+        }
+        1 => HttpResponse::Unauthorized().body("Unauthorized"),
+        2 => HttpResponse::Forbidden().body("Permission denied"),
+        _ => HttpResponse::InternalServerError().body("Internal Server Error"),
+    }
+}
+
+fn validate_token(req: HttpRequest, role_value : String) -> i32 {
     let token = req
         .headers()
         .get(actix_web::http::header::AUTHORIZATION)
         .unwrap()
         .to_str()
         .unwrap();
-
-    // Decode JWT token
     let token_data = decode::<Claims>(
         &token,
         &DecodingKey::from_secret("secret".as_ref()),
         &Validation::new(Algorithm::HS256),
     );
 
-    match token_data {
+    return match token_data {
         Ok(claims) => {
-            // Check if user has permission to request session
-            //TODO : check expiration time
-            if claims.claims.role == "client" {
-                // Create connection to Redis
-                match redis.get_ref().get_multiplexed_async_connection().await {
-                    Ok(mut con) => {
-                        // Retrieve session data from Redis
-                        match con.get::<_,String>("session").await {
-                            Ok(data) => HttpResponse::Ok().body(data),
-                            Err(_) => HttpResponse::InternalServerError().body("Error retrieving session data"),
-                        }
-                    }
-                    Err(_) => HttpResponse::InternalServerError().body("Failed to connect to Redis"),
-                }
+            if claims.claims.role == role_value {
+                0
             } else {
-                HttpResponse::Forbidden().body("Permission denied")
+                2
             }
         }
-        Err(_) => HttpResponse::Unauthorized().body("Unauthorized"),
+        Err(_) => 1,
     }
 }
-
-

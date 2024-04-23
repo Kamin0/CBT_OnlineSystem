@@ -18,6 +18,13 @@ table! {
     }
 }
 
+table! {
+    user_achievements (user_id, achievement_id) {
+        user_id -> Uuid,
+        achievement_id -> Uuid,
+    }
+}
+
 joinable!(users -> roles (role_id));
 
 allow_tables_to_appear_in_same_query!(

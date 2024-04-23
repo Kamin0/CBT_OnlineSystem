@@ -38,6 +38,7 @@ async fn main() -> std::io::Result<()> {
             .route("/login", web::post().to(handlers::login_user))
             .route("/session", web::get().to(handlers::request_session))
             .route("/session", web::post().to(handlers::register_session))
+            .route("/achievement", web::post().to(handlers::validate_achievement))
     })
         .bind("0.0.0.0:8000")?
         .run()

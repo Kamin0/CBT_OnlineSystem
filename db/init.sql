@@ -33,4 +33,6 @@ INSERT INTO roles (name) VALUES ('client');
 INSERT INTO users (username, email, password, salt, role_id)
 VALUES ('server', 'server@uqac.ca', '$2y$12$zcm/bCwARboBGYvyTm.89u9G2qhqZL4Bm3ZKMkCI5G59P1/hS1geC', 'd5ea01744c824dda8321ac7456803eff', (SELECT id FROM roles WHERE name = 'server'));
 
+INSERT INTO achievements (name, description, image_url) VALUES ('First connection', 'You have successfully connected to the server for the first time.', 'https://via.placeholder.com/150');
+
 

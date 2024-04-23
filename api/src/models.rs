@@ -1,5 +1,6 @@
 // models.rs
 use crate::schema::users;
+use crate::schema::user_achievements;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -12,6 +13,13 @@ pub struct User {
     pub password: String,
     pub salt: String,
     pub role_id: Uuid, // Assuming you have a separate table for roles
+}
+
+#[derive(Debug, Serialize, Deserialize, diesel::Queryable, diesel::Insertable)]
+#[diesel(table_name = user_achievements)]
+pub struct UserAchievement {
+    pub user_id: Uuid,
+    pub achievement_id: Uuid,
 }
 
 #[derive(Debug, Deserialize)]
@@ -32,4 +40,10 @@ pub struct LoginUser {
 pub struct Session {
     server_address: String,
     players: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct AchievementValidation {
+    pub username: String,
+    pub achievement_id: Uuid,
 }
