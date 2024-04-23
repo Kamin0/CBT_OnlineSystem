@@ -1,13 +1,15 @@
-use std::sync::{Arc, Mutex};
 use actix_web::{HttpResponse, web};
-use bcrypt::{DEFAULT_COST, hash, verify};
-use diesel::{PgConnection, QueryDsl, RunQueryDsl};
+use actix_web::web::Data;
+use bcrypt::{DEFAULT_COST, hash_with_salt, verify};
+use diesel::{PgConnection, QueryDsl, r2d2, RunQueryDsl};
 use diesel::prelude::*;
+use diesel::r2d2::ConnectionManager;
 use jsonwebtoken::{encode, EncodingKey, Header};
+use rand::random;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::models::{NewUser, User};
+use crate::models::{LoginUser, NewUser, User};
 use crate::schema::{roles, users};
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -17,17 +19,28 @@ struct Claims {
     // Add more claims as needed
 }
 
-pub async fn register_user(user_data: web::Json<NewUser>, db: web::Data<Arc<Mutex<PgConnection>>>) -> HttpResponse {
-    let user_data = user_data.into_inner();
+type DbPool = r2d2::Pool<ConnectionManager<PgConnection>>;
 
-    // Hash password
-    let hashed_password = hash(&user_data.password, DEFAULT_COST).unwrap();
+pub async fn hello() -> HttpResponse {
+    HttpResponse::Ok().body("Hello, world!")
+}
+
+pub async fn register_user(user_data: web::Json<NewUser>, pool:Data<DbPool>) -> HttpResponse {
+    // Extract user data from request
+    let user = user_data.into_inner();
+
+    // Generate salt and hash password
+    let salt: [u8; 16] = random();
+    let hashed_password = hash_with_salt(&user.password,DEFAULT_COST,salt).expect("Failed to hash password");
+
+    // Establish a database connection
+    let mut conn = pool.get().expect("Couldn't get db connection from pool");
 
     // Find role_id by role name
     let role_id: Uuid = match roles::table
         .select(roles::id)
-        .filter(roles::name.eq(&user_data.role_name))
-        .first(&mut *db.lock().unwrap()) // Lock the Mutex and unwrap to get the PgConnection
+        .filter(roles::name.eq(&user.role_name))
+        .first(&mut conn) // Lock the Mutex and unwrap to get the PgConnection
     {
         Ok(id) => id,
         Err(_) => {
@@ -36,36 +49,40 @@ pub async fn register_user(user_data: web::Json<NewUser>, db: web::Data<Arc<Mute
         }
     };
 
-    // Generate salt
-    let salt = Uuid::new_v4().to_string();
-
     // Create new user
     let new_user = User {
         id: Uuid::new_v4(),
-        username: user_data.username,
-        email: user_data.email,
-        password: hashed_password,
-        salt: salt.clone(),
+        username: user.username,
+        email: user.email,
+        password: hashed_password.to_string(),
+        salt: salt.to_vec().iter().map(|b| format!("{:02x}", b)).collect::<String>(),
         role_id,
     };
 
     // Insert new user into the database
     diesel::insert_into(users::table)
         .values(&new_user)
-        .execute(&mut *db.lock().unwrap()) // Lock the Mutex and unwrap to get the PgConnection
+        .execute(&mut conn) // Lock the Mutex and unwrap to get the PgConnection
         .expect("Error inserting user into database");
 
     HttpResponse::Ok().body("User registered successfully")
 }
 
-pub async fn login_user(user_data: web::Json<NewUser>, db: web::Data<Arc<Mutex<PgConnection>>>) -> HttpResponse {
+pub async fn login_user(user_data: web::Json<LoginUser>, pool:Data<DbPool>) -> HttpResponse {
     let user_data = user_data.into_inner();
 
+    let mut conn = pool.get().expect("Couldn't get db connection from pool");
+
     // Retrieve user from database
-    let user: User = users::table
+    let user: User = match users::table
         .filter(users::username.eq(&user_data.username))
-        .first(&mut *db.lock().unwrap())
-        .expect("Error retrieving user from database");
+        .first(&mut conn)
+    {
+        Ok(user) => user,
+        Err(_) => {
+            return HttpResponse::Unauthorized().body("Invalid username or password");
+        }
+    };
 
     // Verify password
     let is_valid_password = verify(&user_data.password, &user.password).unwrap();
@@ -81,7 +98,7 @@ pub async fn login_user(user_data: web::Json<NewUser>, db: web::Data<Arc<Mutex<P
 
         HttpResponse::Ok().json(token)
     } else {
-        HttpResponse::Unauthorized().finish()
+        HttpResponse::Unauthorized().body("Invalid username or password")
     }
 }
 

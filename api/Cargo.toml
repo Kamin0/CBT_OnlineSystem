@@ -14,3 +14,5 @@ serde = { version = "1.0.198", features = ["derive"] }
 uuid = { version = "1.8.0", features = ["v4","serde"] }
 jsonwebtoken = "9"
 bcrypt = "0.15"
+env_logger = "0.11.3"
+rand = "0.8.5"
