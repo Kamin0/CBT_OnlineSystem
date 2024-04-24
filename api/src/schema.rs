@@ -7,7 +7,9 @@ table! {
         email -> Varchar,
         password -> Varchar,
         salt -> Varchar,
+        kda -> Float,
         role_id -> Uuid,
+        rank_id -> Uuid,
     }
 }
 
@@ -34,7 +36,16 @@ table! {
     }
 }
 
+table! {
+    ranks (id) {
+        id -> Uuid,
+        name -> Varchar,
+        image_url -> VarChar,
+    }
+}
+
 joinable!(users -> roles (role_id));
+joinable!(users -> ranks (rank_id));
 joinable!(user_achievements -> users (user_id));
 joinable!(user_achievements -> achievements (achievement_id));
 
@@ -42,6 +53,12 @@ allow_tables_to_appear_in_same_query!(
     users,
     roles,
 );
+
+allow_tables_to_appear_in_same_query!(
+    users,
+    ranks,
+);
+
 allow_tables_to_appear_in_same_query!(
     user_achievements,
     achievements,

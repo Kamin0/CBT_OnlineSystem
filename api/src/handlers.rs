@@ -11,8 +11,8 @@ use redis::{AsyncCommands, Client, RedisError};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::models::{Achievement, AchievementValidation, LoginUser, NewUser, Session, User, UserAchievement};
-use crate::schema::{roles, user_achievements, users, achievements};
+use crate::models::{Achievement, AchievementValidation, LoginUser, NewUser, Session, User, UserAchievement, Rank};
+use crate::schema::{roles, user_achievements, users, achievements, ranks};
 
 #[derive(Debug, Serialize, Deserialize)]
 struct Claims {
@@ -51,6 +51,19 @@ pub async fn register_user(user_data: web::Json<NewUser>, pool:Data<DbPool>) -> 
         }
     };
 
+    //Find the id of the rank bronze
+    let rank_id: Uuid = match ranks::table
+        .select(ranks::id)
+        .filter(ranks::name.eq("Bronze"))
+        .first(&mut conn) // Lock the Mutex and unwrap to get the PgConnection
+    {
+        Ok(id) => id,
+        Err(_) => {
+            // If the role does not exist, you might want to handle this case appropriately
+            return HttpResponse::BadRequest().body("Invalid role name provided");
+        }
+    };
+
     // Create new user
     let new_user = User {
         id: Uuid::new_v4(),
@@ -58,7 +71,9 @@ pub async fn register_user(user_data: web::Json<NewUser>, pool:Data<DbPool>) -> 
         email: user.email,
         password: hashed_password.to_string(),
         salt: salt.to_vec().iter().map(|b| format!("{:02x}", b)).collect::<String>(),
+        kda: 0.0,
         role_id,
+        rank_id
     };
 
     // Insert new user into the database
