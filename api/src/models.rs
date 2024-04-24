@@ -1,6 +1,7 @@
 // models.rs
 use crate::schema::users;
 use crate::schema::user_achievements;
+use crate::schema::achievements;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -20,6 +21,15 @@ pub struct User {
 pub struct UserAchievement {
     pub user_id: Uuid,
     pub achievement_id: Uuid,
+}
+
+#[derive(Debug, Serialize, Deserialize, diesel::Queryable, diesel::Insertable)]
+#[diesel(table_name = achievements)]
+pub struct Achievement {
+    pub id: Uuid,
+    pub name: String,
+    pub description: String,
+    pub image_url: String,
 }
 
 #[derive(Debug, Deserialize)]

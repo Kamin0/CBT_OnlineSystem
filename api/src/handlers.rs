@@ -11,8 +11,8 @@ use redis::{AsyncCommands, Client, RedisError};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::models::{AchievementValidation, LoginUser, NewUser, Session, User, UserAchievement};
-use crate::schema::{roles, user_achievements, users};
+use crate::models::{Achievement, AchievementValidation, LoginUser, NewUser, Session, User, UserAchievement};
+use crate::schema::{roles, user_achievements, users, achievements};
 
 #[derive(Debug, Serialize, Deserialize)]
 struct Claims {
@@ -68,49 +68,6 @@ pub async fn register_user(user_data: web::Json<NewUser>, pool:Data<DbPool>) -> 
         .expect("Error inserting user into database");
 
     HttpResponse::Ok().body("User registered successfully")
-}
-
-pub async fn validate_achievement(user_data: web::Json<AchievementValidation>, pool:Data<DbPool>, http_request: HttpRequest) -> HttpResponse {
-    //Validate the JWT token
-    let token_validation = validate_token(http_request, "server".to_string());
-    //Switch on the token validation result
-    match token_validation {
-        0 => {
-            // Extract user data from request
-            let user_data = user_data.into_inner();
-
-            // Establish a database connection
-            let mut conn = pool.get().expect("Couldn't get db connection from pool");
-
-            // Check if user exists
-            let user_id: Uuid = match users::table
-                .select(users::id)
-                .filter(users::username.eq(&user_data.username))
-                .first(&mut conn)
-            {
-                Ok(id) => id,
-                Err(_) => {
-                    return HttpResponse::BadRequest().body("Invalid username");
-                }
-            };
-
-            let user_achievement = UserAchievement {
-                user_id,
-                achievement_id: user_data.achievement_id,
-            };
-
-            diesel::insert_into(user_achievements::table)
-                .values(&user_achievement)
-                .execute(&mut conn)
-                .expect("Error inserting user achievement into database");
-
-            HttpResponse::Ok().body("Achievement validated successfully")
-        }
-        1 => HttpResponse::Unauthorized().body("Unauthorized"),
-        2 => HttpResponse::Forbidden().body("Permission denied"),
-        _ => HttpResponse::InternalServerError().body("Internal Server Error"),
-    }
-
 }
 
 pub async fn login_user(user_data: web::Json<LoginUser>, pool:Data<DbPool>) -> HttpResponse {
@@ -218,6 +175,138 @@ pub(crate) async fn request_session(
     }
 }
 
+pub async fn validate_achievement(user_data: web::Json<AchievementValidation>, pool:Data<DbPool>, http_request: HttpRequest) -> HttpResponse {
+    //Validate the JWT token
+    let token_validation = validate_token(http_request, "server".to_string());
+    //Switch on the token validation result
+    match token_validation {
+        0 => {
+            // Extract user data from request
+            let user_data = user_data.into_inner();
+
+            // Establish a database connection
+            let mut conn = pool.get().expect("Couldn't get db connection from pool");
+
+            // Check if user exists
+            let user_id: Uuid = match users::table
+                .select(users::id)
+                .filter(users::username.eq(&user_data.username))
+                .first(&mut conn)
+            {
+                Ok(id) => id,
+                Err(_) => {
+                    return HttpResponse::BadRequest().body("Invalid username");
+                }
+            };
+
+            let user_achievement = UserAchievement {
+                user_id,
+                achievement_id: user_data.achievement_id,
+            };
+
+            diesel::insert_into(user_achievements::table)
+                .values(&user_achievement)
+                .execute(&mut conn)
+                .expect("Error inserting user achievement into database");
+
+            HttpResponse::Ok().body("Achievement validated successfully")
+        }
+        1 => HttpResponse::Unauthorized().body("Unauthorized"),
+        2 => HttpResponse::Forbidden().body("Permission denied"),
+        _ => HttpResponse::InternalServerError().body("Internal Server Error"),
+    }
+
+}
+
+//Get an achievement from the database by id (id in the URL)
+pub async fn get_achievement_by_id(
+    req: HttpRequest,
+    pool: Data<DbPool>,
+    achievement_id: web::Path<Uuid>,
+) -> HttpResponse {
+    //Validate the JWT token
+    let token_validation = validate_token(req, "client".to_string());
+    //Switch on the token validation result
+    match token_validation {
+        0 => {
+            // Establish a database connection
+            let mut conn = pool.get().expect("Couldn't get db connection from pool");
+
+            // Retrieve achievement from database
+            let achievement: Achievement = match achievements::table
+                .filter(achievements::id.eq(achievement_id.into_inner()))
+                .first(&mut conn)
+            {
+                Ok(achievement) => achievement,
+                Err(_) => {
+                    return HttpResponse::NotFound().body("Achievement not found");
+                }
+            };
+
+            HttpResponse::Ok().json(achievement)
+        }
+        1 => HttpResponse::Unauthorized().body("Unauthorized"),
+        2 => HttpResponse::Forbidden().body("Permission denied"),
+        _ => HttpResponse::InternalServerError().body("Internal Server Error"),
+    }
+}
+
+//Get all the achievements from the database
+pub async fn get_all_achievements(
+    req: HttpRequest,
+    pool: Data<DbPool>,
+) -> HttpResponse {
+    //Validate the JWT token
+    let token_validation = validate_token(req, "all".to_string());
+    //Switch on the token validation result
+    match token_validation {
+        0 => {
+            // Establish a database connection
+            let mut conn = pool.get().expect("Couldn't get db connection from pool");
+
+            // Retrieve all achievements from database
+            let achievements: Vec<Achievement> = achievements::table
+                .load(&mut conn)
+                .expect("Error loading achievements");
+
+            HttpResponse::Ok().json(achievements)
+        }
+        1 => HttpResponse::Unauthorized().body("Unauthorized"),
+        2 => HttpResponse::Forbidden().body("Permission denied"),
+        _ => HttpResponse::InternalServerError().body("Internal Server Error"),
+    }
+}
+
+//Get all the validate achievements from the database by user id
+pub async fn get_user_achievements(
+    req: HttpRequest,
+    pool: Data<DbPool>,
+    user_id: web::Path<Uuid>,
+) -> HttpResponse {
+    //Validate the JWT token
+    let token_validation = validate_token(req, "client".to_string());
+    //Switch on the token validation result
+    match token_validation {
+        0 => {
+            // Establish a database connection
+            let mut conn = pool.get().expect("Couldn't get db connection from pool");
+
+            // Retrieve all achievements from database
+            let achievements: Vec<Achievement> = user_achievements::table
+                .inner_join(achievements::table)
+                .select(achievements::all_columns)
+                .filter(user_achievements::user_id.eq(user_id.into_inner()))
+                .load(&mut conn)
+                .expect("Error loading achievements");
+
+            HttpResponse::Ok().json(achievements)
+        }
+        1 => HttpResponse::Unauthorized().body("Unauthorized"),
+        2 => HttpResponse::Forbidden().body("Permission denied"),
+        _ => HttpResponse::InternalServerError().body("Internal Server Error"),
+    }
+}
+
 fn validate_token(req: HttpRequest, role_value : String) -> i32 {
     let token = req
         .headers()
@@ -233,7 +322,7 @@ fn validate_token(req: HttpRequest, role_value : String) -> i32 {
 
     return match token_data {
         Ok(claims) => {
-            if claims.claims.role == role_value {
+            if claims.claims.role == role_value || role_value == "all"{
                 0
             } else {
                 2

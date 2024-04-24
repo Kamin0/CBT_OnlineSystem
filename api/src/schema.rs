@@ -25,9 +25,24 @@ table! {
     }
 }
 
+table! {
+    achievements (id) {
+        id -> Uuid,
+        name -> Varchar,
+        description -> Text,
+        image_url -> VarChar,
+    }
+}
+
 joinable!(users -> roles (role_id));
+joinable!(user_achievements -> users (user_id));
+joinable!(user_achievements -> achievements (achievement_id));
 
 allow_tables_to_appear_in_same_query!(
     users,
     roles,
+);
+allow_tables_to_appear_in_same_query!(
+    user_achievements,
+    achievements,
 );
