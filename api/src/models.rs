@@ -68,3 +68,9 @@ pub struct AchievementValidation {
     pub username: String,
     pub achievement_id: Uuid,
 }
+
+#[derive(Debug, Deserialize)]
+pub struct KdaUpdate {
+    pub user_id: Uuid,
+    pub new_kda: f32,
+}

@@ -10,9 +10,10 @@ use rand::random;
 use redis::{AsyncCommands, Client, RedisError};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
+use web::Json;
 
-use crate::models::{Achievement, AchievementValidation, LoginUser, NewUser, Session, User, UserAchievement, Rank};
-use crate::schema::{roles, user_achievements, users, achievements, ranks};
+use crate::models::{Achievement, AchievementValidation, KdaUpdate, LoginUser, NewUser, Session, User, UserAchievement};
+use crate::schema::{achievements, ranks, roles, user_achievements, users};
 
 #[derive(Debug, Serialize, Deserialize)]
 struct Claims {
@@ -27,7 +28,7 @@ pub async fn hello() -> HttpResponse {
     HttpResponse::Ok().body("Hello, world!")
 }
 
-pub async fn register_user(user_data: web::Json<NewUser>, pool:Data<DbPool>) -> HttpResponse {
+pub async fn register_user(user_data: Json<NewUser>, pool:Data<DbPool>) -> HttpResponse {
     // Extract user data from request
     let user = user_data.into_inner();
 
@@ -85,7 +86,7 @@ pub async fn register_user(user_data: web::Json<NewUser>, pool:Data<DbPool>) -> 
     HttpResponse::Ok().body("User registered successfully")
 }
 
-pub async fn login_user(user_data: web::Json<LoginUser>, pool:Data<DbPool>) -> HttpResponse {
+pub async fn login_user(user_data: Json<LoginUser>, pool:Data<DbPool>) -> HttpResponse {
     let user_data = user_data.into_inner();
 
     let mut conn = pool.get().expect("Couldn't get db connection from pool");
@@ -134,7 +135,7 @@ pub async fn login_user(user_data: web::Json<LoginUser>, pool:Data<DbPool>) -> H
 
 pub async fn register_session(
     req: HttpRequest,
-    session: web::Json<Session>,
+    session: Json<Session>,
     redis: Data<Client>
 ) -> HttpResponse {
     // Extract JWT token from request headers
@@ -190,7 +191,7 @@ pub(crate) async fn request_session(
     }
 }
 
-pub async fn validate_achievement(user_data: web::Json<AchievementValidation>, pool:Data<DbPool>, http_request: HttpRequest) -> HttpResponse {
+pub async fn validate_achievement(user_data: Json<AchievementValidation>, pool:Data<DbPool>, http_request: HttpRequest) -> HttpResponse {
     //Validate the JWT token
     let token_validation = validate_token(http_request, "server".to_string());
     //Switch on the token validation result
@@ -315,6 +316,35 @@ pub async fn get_user_achievements(
                 .expect("Error loading achievements");
 
             HttpResponse::Ok().json(achievements)
+        }
+        1 => HttpResponse::Unauthorized().body("Unauthorized"),
+        2 => HttpResponse::Forbidden().body("Permission denied"),
+        _ => HttpResponse::InternalServerError().body("Internal Server Error"),
+    }
+}
+
+//update kda of a user by user id
+pub async fn update_kda(
+    req: HttpRequest,
+    pool: Data<DbPool>,
+    user_data: Json<KdaUpdate>
+) -> HttpResponse {
+    //Validate the JWT token
+    let token_validation = validate_token(req, "server".to_string());
+    //Switch on the token validation result
+    match token_validation {
+        0 => {
+            let user_data = user_data.into_inner();
+            // Establish a database connection
+            let mut conn = pool.get().expect("Couldn't get db connection from pool");
+
+            // Update user KDA
+            diesel::update(users::table.filter(users::id.eq(user_data.user_id)))
+                .set(users::kda.eq(user_data.new_kda))
+                .execute(&mut conn)
+                .expect("Error updating user KDA");
+
+            HttpResponse::Ok().body("KDA updated successfully")
         }
         1 => HttpResponse::Unauthorized().body("Unauthorized"),
         2 => HttpResponse::Forbidden().body("Permission denied"),
