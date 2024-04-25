@@ -74,3 +74,9 @@ pub struct KdaUpdate {
     pub user_id: Uuid,
     pub new_kda: f32,
 }
+
+#[derive(Debug, Deserialize)]
+pub struct RankUpdate {
+    pub user_id: Uuid,
+    pub new_rank_id: Uuid,
+}

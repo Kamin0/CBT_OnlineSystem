@@ -43,6 +43,8 @@ async fn main() -> std::io::Result<()> {
             .route("/achievements", web::get().to(handlers::get_all_achievements))
             .route("/user_achievements/{user_id}", web::get().to(handlers::get_user_achievements))
             .route("/kda", web::put().to(handlers::update_kda))
+            .route("/ranks", web::get().to(handlers::get_all_ranks))
+            .route("/rank", web::put().to(handlers::update_rank))
     })
         .bind("0.0.0.0:8000")?
         .run()

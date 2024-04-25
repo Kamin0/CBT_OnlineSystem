@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use web::Json;
 
-use crate::models::{Achievement, AchievementValidation, KdaUpdate, LoginUser, NewUser, Session, User, UserAchievement};
+use crate::models::{Achievement, AchievementValidation, KdaUpdate, LoginUser, NewUser, Rank, RankUpdate, Session, User, UserAchievement};
 use crate::schema::{achievements, ranks, roles, user_achievements, users};
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -345,6 +345,61 @@ pub async fn update_kda(
                 .expect("Error updating user KDA");
 
             HttpResponse::Ok().body("KDA updated successfully")
+        }
+        1 => HttpResponse::Unauthorized().body("Unauthorized"),
+        2 => HttpResponse::Forbidden().body("Permission denied"),
+        _ => HttpResponse::InternalServerError().body("Internal Server Error"),
+    }
+}
+
+//Get all ranks from the database
+pub async fn get_all_ranks(
+    req: HttpRequest,
+    pool: Data<DbPool>,
+) -> HttpResponse {
+    //Validate the JWT token
+    let token_validation = validate_token(req, "all".to_string());
+    //Switch on the token validation result
+    match token_validation {
+        0 => {
+            // Establish a database connection
+            let mut conn = pool.get().expect("Couldn't get db connection from pool");
+
+            // Retrieve all ranks from database
+            let ranks: Vec<Rank> = ranks::table
+                .load(&mut conn)
+                .expect("Error loading ranks");
+
+            HttpResponse::Ok().json(ranks)
+        }
+        1 => HttpResponse::Unauthorized().body("Unauthorized"),
+        2 => HttpResponse::Forbidden().body("Permission denied"),
+        _ => HttpResponse::InternalServerError().body("Internal Server Error"),
+    }
+}
+
+//Update user rank by user id
+pub async fn update_rank(
+    req: HttpRequest,
+    pool: Data<DbPool>,
+    user_data: Json<RankUpdate>
+) -> HttpResponse {
+    //Validate the JWT token
+    let token_validation = validate_token(req, "server".to_string());
+    //Switch on the token validation result
+    match token_validation {
+        0 => {
+            let user_data = user_data.into_inner();
+            // Establish a database connection
+            let mut conn = pool.get().expect("Couldn't get db connection from pool");
+
+            // Update user rank
+            diesel::update(users::table.filter(users::id.eq(user_data.user_id)))
+                .set(users::rank_id.eq(user_data.new_rank_id))
+                .execute(&mut conn)
+                .expect("Error updating user rank");
+
+            HttpResponse::Ok().body("Rank updated successfully")
         }
         1 => HttpResponse::Unauthorized().body("Unauthorized"),
         2 => HttpResponse::Forbidden().body("Permission denied"),
