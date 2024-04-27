@@ -12,8 +12,8 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use web::Json;
 
-use crate::models::{Achievement, AchievementValidation, KdaUpdate, LoginUser, NewUser, Rank, RankUpdate, Session, User, UserAchievement};
-use crate::schema::{achievements, ranks, roles, user_achievements, users};
+use crate::models::{Achievement, AchievementValidation, DBSession, KdaUpdate, LoginUser, NewUser, Rank, RankUpdate, Session, User, UserAchievement};
+use crate::schema::{achievements, ranks, roles, sessions, user_achievements, users};
 
 #[derive(Debug, Serialize, Deserialize)]
 struct Claims {
@@ -136,7 +136,8 @@ pub async fn login_user(user_data: Json<LoginUser>, pool:Data<DbPool>) -> HttpRe
 pub async fn register_session(
     req: HttpRequest,
     session: Json<Session>,
-    redis: Data<Client>
+    redis: Data<Client>,
+    pool: Data<DbPool>,
 ) -> HttpResponse {
     // Extract JWT token from request headers
     let token_validation = validate_token(req, "server".to_string());
@@ -145,10 +146,20 @@ pub async fn register_session(
         0 => {
             match redis.get_ref().get_multiplexed_async_connection().await {
                 Ok(mut con) => {
-                    // Store session data in Redis
+                    // Store session data in Redis using the session id as the key
+                    let session_id: Uuid = Uuid::new_v4();
                     let _: Result<(), RedisError> = con
-                        .set("session", serde_json::to_string(&session.into_inner()).unwrap())
+                        .set(session_id.to_string(), serde_json::to_string(&session.into_inner()).unwrap())
                         .await;
+                    //Add the session to a table in the database
+                    let mut conn = pool.get().expect("Couldn't get db connection from pool");
+
+                    // Insert new user into the database with the session id
+                    diesel::insert_into(sessions::table)
+                        .values(sessions::id.eq(session_id))
+                        .execute(&mut conn) // Lock the Mutex and unwrap to get the PgConnection
+                        .expect("Error inserting user into database");
+
                     HttpResponse::Ok().body("Session registered successfully")
                 }
                 Err(_) => HttpResponse::InternalServerError().body("Failed to connect to Redis"),
@@ -162,14 +173,125 @@ pub async fn register_session(
 
 pub(crate) async fn request_session(
     req: HttpRequest,
-    redis: web::Data<Client>,
+    redis: Data<Client>,
+    pool: Data<DbPool>,
+    other_username: web::Path<String>,
 ) -> HttpResponse {
     // Extract JWT token from request headers
     let token_validation = validate_token(req, "client".to_string());
     //Switch on the token validation result
     match token_validation {
         0 => {
-            // Create connection to Redis
+            //Get all non-empty the sessions from the database
+            let mut conn = pool.get().expect("Couldn't get db connection from pool");
+            let sessions: Vec<DBSession> = sessions::table
+                .filter(sessions::is_empty.eq(false))
+                .load(&mut conn)
+                .expect("Error loading sessions");
+
+            let session_id: Uuid;
+            if (sessions.len() == 0) {
+                //Get the first empty session from the database
+                let empty_session: Uuid = match sessions::table
+                    .select(sessions::id)
+                    .filter(sessions::is_empty.eq(true))
+                    .first(&mut conn)
+                {
+                    Ok(id) => id,
+                    Err(_) => {
+                        return HttpResponse::BadRequest().body("No empty sessions available");
+                    }
+                };
+                session_id = empty_session;
+            } else {
+                //Get the user data from the database
+                let user_data: User  = match users::table
+                    .filter(users::username.eq(other_username.into_inner()))
+                    .first(&mut conn)
+                {
+                    Ok(id) => id,
+                    Err(_) => {
+                        return HttpResponse::BadRequest().body("Invalid username");
+                    }
+                };
+
+                //Get the rank of the user
+                let rank: Rank = match ranks::table
+                    .filter(ranks::id.eq(&user_data.rank_id))
+                    .first(&mut conn)
+                {
+                    Ok(id) => id,
+                    Err(_) => {
+                        return HttpResponse::BadRequest().body("Invalid rank id");
+                    }
+                };
+
+                //Get the average kda of the user
+                let kda: f32 = user_data.kda;
+
+                //Get the session with the closest average kda to the user
+                let mut closest_session: DBSession = sessions[0].clone();
+                let mut closest_distance: f32 = (kda - sessions[0].average_kda).abs();
+                for session in sessions.iter() {
+                    let distance = (kda - session.average_kda).abs();
+                    if distance < closest_distance {
+                        closest_distance = distance;
+                        closest_session = session.clone();
+                    }
+                }
+                session_id = closest_session.id;
+            }
+
+
+            // Get the session from Redis
+            match redis.get_ref().get_multiplexed_async_connection().await {
+                Ok(mut con) => {
+                    // Retrieve session data from Redis
+                    let session_data: Result<String, RedisError> = con.get(session_id.to_string()).await;
+                    match session_data {
+                        Ok(data) => {
+                            let session: Session = serde_json::from_str(&data).unwrap();
+                            HttpResponse::Ok().json(session)
+                        }
+                        Err(_) => HttpResponse::NotFound().body("Session not found"),
+                    }
+                }
+                Err(_) => HttpResponse::InternalServerError().body("Failed to connect to Redis"),
+            }
+        }
+        1 => HttpResponse::Unauthorized().body("Unauthorized"),
+        2 => HttpResponse::Forbidden().body("Permission denied"),
+        _ => HttpResponse::InternalServerError().body("Internal Server Error"),
+    }
+}
+
+//Connect the  player to a session by adding his id to the session
+pub async fn connect_to_session(
+    req: HttpRequest,
+    pool: Data<DbPool>,
+    redis: Data<Client>,
+    session_id: web::Path<Uuid>,
+    other_username: web::Path<String>,
+) -> HttpResponse {
+    //Validate the JWT token
+    let token_validation = validate_token(req, "client".to_string());
+    //Switch on the token validation result
+    match token_validation {
+        0 => {
+            // Establish a database connection
+            let mut conn = pool.get().expect("Couldn't get db connection from pool");
+
+            let user_id: Uuid = match users::table
+                .select(users::id)
+                .filter(users::username.eq(other_username.into_inner()))
+                .first(&mut conn)
+            {
+                Ok(id) => id,
+                Err(_) => {
+                    return HttpResponse::BadRequest().body("Invalid username");
+                }
+            };
+
             match redis.get_ref().get_multiplexed_async_connection().await {
                 Ok(mut con) => {
                     // Retrieve session data from Redis
@@ -182,7 +304,7 @@ pub(crate) async fn request_session(
                         Err(_) => HttpResponse::NotFound().body("Session not found"),
                     }
                 }
-                Err(_) => HttpResponse::InternalServerError().body("Failed to connect to Redis"),
+                Err(_) => HttpResponse::InternalServerError().body("Failed to connect to Redis")
             }
         }
         1 => HttpResponse::Unauthorized().body("Unauthorized"),
@@ -297,7 +419,7 @@ pub async fn get_all_achievements(
 pub async fn get_user_achievements(
     req: HttpRequest,
     pool: Data<DbPool>,
-    username: web::Path<String>,
+    username_into: web::Path<String>,
 ) -> HttpResponse {
     //Validate the JWT token
     let token_validation = validate_token(req, "client".to_string());
@@ -309,7 +431,7 @@ pub async fn get_user_achievements(
 
             let user_id: Uuid = match users::table
                 .select(users::id)
-                .filter(users::username.eq(username.into_inner()))
+                .filter(users::username.eq(username_into.into_inner()))
                 .first(&mut conn)
             {
                 Ok(id) => id,

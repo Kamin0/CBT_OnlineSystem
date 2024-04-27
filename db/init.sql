@@ -35,6 +35,13 @@ CREATE TABLE user_achievements (
     PRIMARY KEY (user_id, achievement_id)
 );
 
+CREATE TABLE sessions (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    average_kda FLOAT,
+    average_rank UUID REFERENCES ranks(id),
+    is_empty BOOLEAN DEFAULT TRUE
+);
+
 INSERT INTO roles (name) VALUES ('server');
 INSERT INTO roles (name) VALUES ('client');
 

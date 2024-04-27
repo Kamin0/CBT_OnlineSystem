@@ -5,6 +5,7 @@ use crate::schema::achievements;
 use crate::schema::ranks;
 use crate::schema::user_achievements;
 use crate::schema::users;
+use crate::schema::sessions;
 
 #[derive(Debug, Serialize, Deserialize, diesel::Queryable, diesel::Insertable)]
 #[diesel(table_name = users)]
@@ -41,6 +42,15 @@ pub struct Rank {
     pub id: Uuid,
     pub name: String,
     pub image_url: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, diesel::Queryable, diesel::Insertable,Clone)]
+#[diesel(table_name = sessions)]
+pub struct DBSession {
+    pub id: Uuid,
+    pub average_kda: f32,
+    pub average_rank: Uuid,
+    pub is_empty: bool,
 }
 
 #[derive(Debug, Deserialize)]

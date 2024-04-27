@@ -44,10 +44,20 @@ table! {
     }
 }
 
+table! {
+    sessions (id) {
+        id -> Uuid,
+        average_kda -> Float,
+        average_rank -> Uuid,
+        is_empty -> Bool,
+    }
+}
+
 joinable!(users -> roles (role_id));
 joinable!(users -> ranks (rank_id));
 joinable!(user_achievements -> users (user_id));
 joinable!(user_achievements -> achievements (achievement_id));
+joinable!(sessions -> ranks (average_rank));
 
 allow_tables_to_appear_in_same_query!(
     users,
