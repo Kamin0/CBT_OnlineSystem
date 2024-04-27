@@ -71,12 +71,12 @@ pub struct AchievementValidation {
 
 #[derive(Debug, Deserialize)]
 pub struct KdaUpdate {
-    pub user_id: Uuid,
+    pub username: String,
     pub new_kda: f32,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct RankUpdate {
-    pub user_id: Uuid,
+    pub username: String,
     pub new_rank_id: Uuid,
 }

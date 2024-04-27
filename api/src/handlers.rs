@@ -297,7 +297,7 @@ pub async fn get_all_achievements(
 pub async fn get_user_achievements(
     req: HttpRequest,
     pool: Data<DbPool>,
-    user_id: web::Path<Uuid>,
+    username: web::Path<String>,
 ) -> HttpResponse {
     //Validate the JWT token
     let token_validation = validate_token(req, "client".to_string());
@@ -307,11 +307,22 @@ pub async fn get_user_achievements(
             // Establish a database connection
             let mut conn = pool.get().expect("Couldn't get db connection from pool");
 
+            let user_id: Uuid = match users::table
+                .select(users::id)
+                .filter(users::username.eq(username.into_inner()))
+                .first(&mut conn)
+            {
+                Ok(id) => id,
+                Err(_) => {
+                    return HttpResponse::BadRequest().body("Invalid username");
+                }
+            };
+
             // Retrieve all achievements from database
             let achievements: Vec<Achievement> = user_achievements::table
                 .inner_join(achievements::table)
                 .select(achievements::all_columns)
-                .filter(user_achievements::user_id.eq(user_id.into_inner()))
+                .filter(user_achievements::user_id.eq(&user_id))
                 .load(&mut conn)
                 .expect("Error loading achievements");
 
@@ -338,8 +349,19 @@ pub async fn update_kda(
             // Establish a database connection
             let mut conn = pool.get().expect("Couldn't get db connection from pool");
 
+            let user_id: Uuid = match users::table
+                .select(users::id)
+                .filter(users::username.eq(&user_data.username))
+                .first(&mut conn)
+            {
+                Ok(id) => id,
+                Err(_) => {
+                    return HttpResponse::BadRequest().body("Invalid username");
+                }
+            };
+
             // Update user KDA
-            diesel::update(users::table.filter(users::id.eq(user_data.user_id)))
+            diesel::update(users::table.filter(users::id.eq(user_id)))
                 .set(users::kda.eq(user_data.new_kda))
                 .execute(&mut conn)
                 .expect("Error updating user KDA");
@@ -393,8 +415,19 @@ pub async fn update_rank(
             // Establish a database connection
             let mut conn = pool.get().expect("Couldn't get db connection from pool");
 
+            let user_id: Uuid = match users::table
+                .select(users::id)
+                .filter(users::username.eq(&user_data.username))
+                .first(&mut conn)
+            {
+                Ok(id) => id,
+                Err(_) => {
+                    return HttpResponse::BadRequest().body("Invalid username");
+                }
+            };
+
             // Update user rank
-            diesel::update(users::table.filter(users::id.eq(user_data.user_id)))
+            diesel::update(users::table.filter(users::id.eq(user_id)))
                 .set(users::rank_id.eq(user_data.new_rank_id))
                 .execute(&mut conn)
                 .expect("Error updating user rank");
