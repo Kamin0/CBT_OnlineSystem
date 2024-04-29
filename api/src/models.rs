@@ -6,6 +6,7 @@ use crate::schema::ranks;
 use crate::schema::user_achievements;
 use crate::schema::users;
 use crate::schema::sessions;
+use crate::schema::users::username;
 
 #[derive(Debug, Serialize, Deserialize, diesel::Queryable, diesel::Insertable)]
 #[diesel(table_name = users)]
@@ -69,8 +70,14 @@ pub struct LoginUser {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Session {
-    server_address: String,
-    players: Vec<String>,
+    pub server_address: String,
+    pub players: Vec<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SessionResponse {
+    pub session_id: Uuid,
+    pub server_address: String
 }
 
 #[derive(Debug, Deserialize)]
@@ -89,4 +96,10 @@ pub struct KdaUpdate {
 pub struct RankUpdate {
     pub username: String,
     pub new_rank_id: Uuid,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ConnectSession {
+    pub session_id: Uuid,
+    pub username: String,
 }

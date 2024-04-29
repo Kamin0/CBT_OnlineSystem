@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use web::Json;
 
-use crate::models::{Achievement, AchievementValidation, DBSession, KdaUpdate, LoginUser, NewUser, Rank, RankUpdate, Session, User, UserAchievement};
+use crate::models::{Achievement, AchievementValidation, ConnectSession, DBSession, KdaUpdate, LoginUser, NewUser, Rank, RankUpdate, Session, SessionResponse, User, UserAchievement};
 use crate::schema::{achievements, ranks, roles, sessions, user_achievements, users};
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -195,7 +195,7 @@ pub(crate) async fn request_session(
                 .expect("Error loading sessions");
 
             let session_id: Uuid;
-            if (sessions.len() == 0) {
+            if sessions.len() == 0 {
                 //Get the first empty session from the database
                 let empty_session: Uuid = match sessions::table
                     .select(sessions::id)
@@ -204,7 +204,7 @@ pub(crate) async fn request_session(
                 {
                     Ok(id) => id,
                     Err(_) => {
-                        return HttpResponse::BadRequest().body("No empty sessions available");
+                        return HttpResponse::BadRequest().body("No session available");
                     }
                 };
                 session_id = empty_session;
@@ -221,7 +221,7 @@ pub(crate) async fn request_session(
                 };
 
                 //Get the rank of the user
-                let rank: Rank = match ranks::table
+                let _rank: Rank = match ranks::table
                     .filter(ranks::id.eq(&user_data.rank_id))
                     .first(&mut conn)
                 {
@@ -256,7 +256,11 @@ pub(crate) async fn request_session(
                     match session_data {
                         Ok(data) => {
                             let session: Session = serde_json::from_str(&data).unwrap();
-                            HttpResponse::Ok().json(session)
+                            let response : SessionResponse = SessionResponse {
+                                session_id,
+                                server_address: session.server_address
+                            };
+                            HttpResponse::Ok().json(response)
                         }
                         Err(_) => HttpResponse::NotFound().body("Session not found"),
                     }
@@ -275,8 +279,7 @@ pub async fn connect_to_session(
     req: HttpRequest,
     pool: Data<DbPool>,
     redis: Data<Client>,
-    session_id: web::Path<Uuid>,
-    other_username: web::Path<String>,
+    connection_data: Json<ConnectSession>,
 ) -> HttpResponse {
     //Validate the JWT token
     let token_validation = validate_token(req, "client".to_string());
@@ -286,9 +289,10 @@ pub async fn connect_to_session(
             // Establish a database connection
             let mut conn = pool.get().expect("Couldn't get db connection from pool");
 
-            let user_id: Uuid = match users::table
+            //Get the player_id from the username
+            let player_id: Uuid = match users::table
                 .select(users::id)
-                .filter(users::username.eq(other_username.into_inner()))
+                .filter(users::username.eq(&connection_data.username))
                 .first(&mut conn)
             {
                 Ok(id) => id,
@@ -297,19 +301,85 @@ pub async fn connect_to_session(
                 }
             };
 
+            let mut session: Session;
+            //Add the user to the session in redis
             match redis.get_ref().get_multiplexed_async_connection().await {
                 Ok(mut con) => {
                     // Retrieve session data from Redis
-                    let session_data: Result<String, RedisError> = con.get("session").await;
+                    let session_data: Result<String, RedisError> = con.get(connection_data.session_id.to_string()).await;
                     match session_data {
                         Ok(data) => {
-                            let session: Session = serde_json::from_str(&data).unwrap();
-                            HttpResponse::Ok().json(session)
+                            session = serde_json::from_str(&data).unwrap();
+                            session.players.push(String::from(player_id));
+                            let _: Result<(), RedisError> = con
+                                .set(connection_data.session_id.to_string(), serde_json::to_string(&session).unwrap())
+                                .await;
                         }
-                        Err(_) => HttpResponse::NotFound().body("Session not found"),
+                        Err(_) => return HttpResponse::NotFound().body("Session not found")
                     }
                 }
-                Err(_) => HttpResponse::InternalServerError().body("Failed to connect to Redis")
+                Err(_) => return HttpResponse::InternalServerError().body("Failed to connect to Redis")
+            }
+
+            //Get the kda of the player
+            let kda: f32 = match users::table
+                .select(users::kda)
+                .filter(users::id.eq(&player_id))
+                .first(&mut conn)
+            {
+                Ok(kda) => kda,
+                Err(_) => {
+                    return HttpResponse::BadRequest().body("Invalid user");
+                }
+            };
+
+            //TODO : check if the session is empty before updating the kda
+            let mut session_kda: f32;
+            if(session.players.len() == 1){
+                //Make the session not empty
+                session_kda = kda;
+                match diesel::update(sessions::table
+                    .filter(sessions::id.eq(connection_data.session_id)))
+                    .set(sessions::is_empty.eq(false),)
+                    .execute(&mut conn)
+                {
+                    Ok(_) => {}
+                    Err(_) => {
+                        return HttpResponse::BadRequest().body("Error updating session");
+                    }
+                }
+            } else {
+                //Get the mean Of the kda of the players in the session
+                let mut total_kda: f32 = 0.0;
+                for player in session.players.iter() {
+                    let player_id: Uuid = Uuid::parse_str(player).unwrap();
+                    let player_kda: f32 = match users::table
+                        .select(users::kda)
+                        .filter(users::id.eq(&player_id))
+                        .first(&mut conn)
+                    {
+                        Ok(kda) => kda,
+                        Err(_) => {
+                            return HttpResponse::BadRequest().body("Invalid user");
+                        }
+                    };
+                    total_kda += player_kda;
+                }
+                session_kda = total_kda / session.players.len() as f32;
+            }
+
+            //Update the session with the new kda
+            match diesel::update(sessions::table
+                .filter(sessions::id.eq(connection_data.session_id)))
+                .set(sessions::average_kda.eq(session_kda),)
+                .execute(&mut conn)
+            {
+                Ok(_) => {
+                    HttpResponse::Ok().body("Player connected to session successfully")
+                }
+                Err(_) => {
+                    return HttpResponse::BadRequest().body("Error updating session");
+                }
             }
         }
         1 => HttpResponse::Unauthorized().body("Unauthorized"),
