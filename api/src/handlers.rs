@@ -78,12 +78,17 @@ pub async fn register_user(user_data: Json<NewUser>, pool:Data<DbPool>) -> HttpR
     };
 
     // Insert new user into the database
-    diesel::insert_into(users::table)
+    return match diesel::insert_into(users::table)
         .values(&new_user)
         .execute(&mut conn) // Lock the Mutex and unwrap to get the PgConnection
-        .expect("Error inserting user into database");
-
-    HttpResponse::Ok().body("User registered successfully")
+    {
+        Ok(_) => {
+            HttpResponse::Ok().body("User registered successfully")
+        }
+        Err(_) => {
+            HttpResponse::BadRequest().body("Error inserting user into database")
+        }
+    }
 }
 
 pub async fn login_user(user_data: Json<LoginUser>, pool:Data<DbPool>) -> HttpResponse {
@@ -342,12 +347,17 @@ pub async fn validate_achievement(user_data: Json<AchievementValidation>, pool:D
                 achievement_id: user_data.achievement_id,
             };
 
-            diesel::insert_into(user_achievements::table)
+            match diesel::insert_into(user_achievements::table)
                 .values(&user_achievement)
                 .execute(&mut conn)
-                .expect("Error inserting user achievement into database");
-
-            HttpResponse::Ok().body("Achievement validated successfully")
+            {
+                Ok(_) => {
+                    HttpResponse::Ok().body("Achievement validated successfully")
+                }
+                Err(_) => {
+                    return HttpResponse::BadRequest().body("Error inserting user achievement into database");
+                }
+            }
         }
         1 => HttpResponse::Unauthorized().body("Unauthorized"),
         2 => HttpResponse::Forbidden().body("Permission denied"),
@@ -483,12 +493,17 @@ pub async fn update_kda(
             };
 
             // Update user KDA
-            diesel::update(users::table.filter(users::id.eq(user_id)))
+             match diesel::update(users::table.filter(users::id.eq(user_id)))
                 .set(users::kda.eq(user_data.new_kda))
                 .execute(&mut conn)
-                .expect("Error updating user KDA");
-
-            HttpResponse::Ok().body("KDA updated successfully")
+             {
+                Ok(_) => {
+                    HttpResponse::Ok().body("KDA updated successfully")
+                }
+                Err(_) => {
+                    return HttpResponse::BadRequest().body("Error updating user KDA");
+                }
+             }
         }
         1 => HttpResponse::Unauthorized().body("Unauthorized"),
         2 => HttpResponse::Forbidden().body("Permission denied"),
@@ -549,12 +564,17 @@ pub async fn update_rank(
             };
 
             // Update user rank
-            diesel::update(users::table.filter(users::id.eq(user_id)))
+            match diesel::update(users::table.filter(users::id.eq(user_id)))
                 .set(users::rank_id.eq(user_data.new_rank_id))
                 .execute(&mut conn)
-                .expect("Error updating user rank");
-
-            HttpResponse::Ok().body("Rank updated successfully")
+            {
+                Ok(_) => {
+                    HttpResponse::Ok().body("Rank updated successfully")
+                }
+                Err(_) => {
+                    return HttpResponse::BadRequest().body("Error updating user rank");
+                }
+            }
         }
         1 => HttpResponse::Unauthorized().body("Unauthorized"),
         2 => HttpResponse::Forbidden().body("Permission denied"),
