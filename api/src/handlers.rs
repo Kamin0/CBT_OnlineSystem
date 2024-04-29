@@ -511,6 +511,39 @@ pub async fn update_kda(
     }
 }
 
+//Get kda of a user by username
+pub async fn get_kda(
+    req: HttpRequest,
+    pool: Data<DbPool>,
+    username_into: web::Path<String>,
+) -> HttpResponse {
+    //Validate the JWT token
+    let token_validation = validate_token(req, "all".to_string());
+    //Switch on the token validation result
+    match token_validation {
+        0 => {
+            // Establish a database connection
+            let mut conn = pool.get().expect("Couldn't get db connection from pool");
+
+            // Retrieve user from database
+            let user: User = match users::table
+                .filter(users::username.eq(&username_into.into_inner()))
+                .first(&mut conn)
+            {
+                Ok(user) => user,
+                Err(_) => {
+                    return HttpResponse::NotFound().body("User not found");
+                }
+            };
+
+            HttpResponse::Ok().json(user.kda)
+        }
+        1 => HttpResponse::Unauthorized().body("Unauthorized"),
+        2 => HttpResponse::Forbidden().body("Permission denied"),
+        _ => HttpResponse::InternalServerError().body("Internal Server Error"),
+    }
+}
+
 //Get all ranks from the database
 pub async fn get_all_ranks(
     req: HttpRequest,
