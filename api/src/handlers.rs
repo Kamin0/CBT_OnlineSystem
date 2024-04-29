@@ -616,12 +616,15 @@ pub async fn update_rank(
 }
 
 fn validate_token(req: HttpRequest, role_value : String) -> i32 {
-    let token = req
+    let token =  match req
         .headers()
         .get(actix_web::http::header::AUTHORIZATION)
-        .unwrap()
-        .to_str()
-        .unwrap();
+        {
+            Some(token) => token.to_str().unwrap().to_string(),
+            None => {
+                return 1;
+            }
+        };
     let token_data = decode::<Claims>(
         &token,
         &DecodingKey::from_secret("secret".as_ref()),
