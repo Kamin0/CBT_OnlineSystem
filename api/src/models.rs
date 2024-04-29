@@ -3,10 +3,9 @@ use uuid::Uuid;
 
 use crate::schema::achievements;
 use crate::schema::ranks;
+use crate::schema::sessions;
 use crate::schema::user_achievements;
 use crate::schema::users;
-use crate::schema::sessions;
-use crate::schema::users::username;
 
 #[derive(Debug, Serialize, Deserialize, diesel::Queryable, diesel::Insertable)]
 #[diesel(table_name = users)]
