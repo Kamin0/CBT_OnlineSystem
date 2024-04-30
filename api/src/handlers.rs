@@ -769,6 +769,26 @@ pub async fn update_games_played(
     }
 }
 
+pub  async fn get_ip(
+    req : HttpRequest,
+) -> HttpResponse {
+    //Validate the JWT token
+    let token_validation = validate_token(req.clone(), "server".to_string());
+    //Switch on the token validation result
+    match token_validation {
+        0 => {
+            // Get the client's IP address
+            let client_ip = req.connection_info().peer_addr().unwrap().to_string();
+
+            // Return the client's IP address
+            HttpResponse::Ok().json(client_ip)
+        }
+        1 => HttpResponse::Unauthorized().body("Unauthorized"),
+        2 => HttpResponse::Forbidden().body("Permission denied"),
+        _ => HttpResponse::InternalServerError().body("Internal Server Error"),
+    }
+}
+
 
 fn validate_token(req: HttpRequest, role_value : String) -> i32 {
     let token =  match req
