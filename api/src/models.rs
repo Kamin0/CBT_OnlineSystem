@@ -107,3 +107,8 @@ pub struct ConnectSession {
 pub  struct AchievementsResponse {
     pub  achievements: Vec<Achievement>,
 }
+
+#[derive(Debug, Serialize, Deserialize)]
+pub  struct RanksResponse {
+    pub ranks: Vec<Rank>,
+}
