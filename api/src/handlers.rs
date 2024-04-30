@@ -378,6 +378,30 @@ pub async fn connect_to_session(
                 .execute(&mut conn)
             {
                 Ok(_) => {
+                }
+                Err(_) => {
+                    return HttpResponse::BadRequest().body("Error updating session");
+                }
+            };
+
+            //Update the session with the rank of the player
+            let player_rank_id: Uuid = match users::table
+                .select(users::rank_id)
+                .filter(users::username.eq(&connection_data.username))
+                .first(&mut conn)
+            {
+                Ok(id) => id,
+                Err(_) => {
+                    return HttpResponse::BadRequest().body("Invalid username");
+                }
+            };
+
+            match diesel::update(sessions::table
+                .filter(sessions::id.eq(connection_data.session_id)))
+                .set(sessions::average_rank.eq(player_rank_id),)
+                .execute(&mut conn)
+            {
+                Ok(_) => {
                     HttpResponse::Ok().body("Player connected to session successfully")
                 }
                 Err(_) => {
