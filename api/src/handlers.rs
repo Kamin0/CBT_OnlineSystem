@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use web::Json;
 
-use crate::models::{Achievement, AchievementValidation, ConnectSession, DBSession, KdaUpdate, LoginUser, NewUser, Rank, RankUpdate, Session, SessionResponse, User, UserAchievement};
+use crate::models::{Achievement, AchievementValidation, ConnectSession, DBSession, KdaUpdate, LoginUser, NewUser, Rank, RankUpdate, Session, SessionResponse, User, UserAchievement, AchievementsResponse};
 use crate::schema::{achievements, ranks, roles, sessions, user_achievements, users};
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -486,8 +486,9 @@ pub async fn get_all_achievements(
             let achievements: Vec<Achievement> = achievements::table
                 .load(&mut conn)
                 .expect("Error loading achievements");
-
-            HttpResponse::Ok().json(achievements)
+            
+            let response = AchievementsResponse {achievements};
+            HttpResponse::Ok().json(response)
         }
         1 => HttpResponse::Unauthorized().body("Unauthorized"),
         2 => HttpResponse::Forbidden().body("Permission denied"),
@@ -528,7 +529,8 @@ pub async fn get_user_achievements(
                 .load(&mut conn)
                 .expect("Error loading achievements");
 
-            HttpResponse::Ok().json(achievements)
+            let response = AchievementsResponse {achievements};
+            HttpResponse::Ok().json(response)
         }
         1 => HttpResponse::Unauthorized().body("Unauthorized"),
         2 => HttpResponse::Forbidden().body("Permission denied"),
