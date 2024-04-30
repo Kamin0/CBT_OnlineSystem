@@ -12,7 +12,9 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use web::Json;
 
-use crate::models::{Achievement, AchievementValidation, ConnectSession, DBSession, KdaUpdate, LoginUser, NewUser, Rank, RankUpdate, Session, SessionResponse, User, UserAchievement, AchievementsResponse};
+use crate::models::{Achievement, AchievementValidation, ConnectSession, DBSession, KdaUpdate, LoginUser,
+                    NewUser, Rank, RankUpdate, Session, SessionResponse, User, UserAchievement, 
+                    AchievementsResponse,RanksResponse};
 use crate::schema::{achievements, ranks, roles, sessions, user_achievements, users};
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -634,8 +636,10 @@ pub async fn get_all_ranks(
             let ranks: Vec<Rank> = ranks::table
                 .load(&mut conn)
                 .expect("Error loading ranks");
+            
+            let response = RanksResponse{ranks};
 
-            HttpResponse::Ok().json(ranks)
+            HttpResponse::Ok().json(response)
         }
         1 => HttpResponse::Unauthorized().body("Unauthorized"),
         2 => HttpResponse::Forbidden().body("Permission denied"),
