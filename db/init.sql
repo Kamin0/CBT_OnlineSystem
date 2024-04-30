@@ -18,6 +18,7 @@ CREATE TABLE users (
     password VARCHAR(255) NOT NULL,
     salt VARCHAR(255) NOT NULL,
     kda FLOAT DEFAULT 0,
+    nb_games INT DEFAULT 0,
     role_id UUID REFERENCES roles(id),
     rank_id UUID REFERENCES ranks(id)
 );

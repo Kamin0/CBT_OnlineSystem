@@ -73,6 +73,7 @@ pub async fn register_user(user_data: Json<NewUser>, pool:Data<DbPool>) -> HttpR
         password: hashed_password.to_string(),
         salt: salt.to_vec().iter().map(|b| format!("{:02x}", b)).collect::<String>(),
         kda: 0.0,
+        nb_games: 0,
         role_id,
         rank_id
     };
@@ -686,6 +687,84 @@ pub async fn update_rank(
         _ => HttpResponse::InternalServerError().body("Internal Server Error"),
     }
 }
+
+//Get the number of games played by a user by username
+pub async fn get_games_played(
+    req: HttpRequest,
+    pool: Data<DbPool>,
+    username_into: web::Path<String>,
+) -> HttpResponse {
+    //Validate the JWT token
+    let token_validation = validate_token(req, "all".to_string());
+    //Switch on the token validation result
+    match token_validation {
+        0 => {
+            // Establish a database connection
+            let mut conn = pool.get().expect("Couldn't get db connection from pool");
+
+            // Retrieve user from database
+            let user: User = match users::table
+                .filter(users::username.eq(&username_into.into_inner()))
+                .first(&mut conn)
+            {
+                Ok(user) => user,
+                Err(_) => {
+                    return HttpResponse::NotFound().body("User not found");
+                }
+            };
+
+            HttpResponse::Ok().json(user.nb_games)
+        }
+        1 => HttpResponse::Unauthorized().body("Unauthorized"),
+        2 => HttpResponse::Forbidden().body("Permission denied"),
+        _ => HttpResponse::InternalServerError().body("Internal Server Error"),
+    }
+}
+
+//Update the number of game played by a user by username
+pub async fn update_games_played(
+    req: HttpRequest,
+    pool: Data<DbPool>,
+    username_into: web::Path<String>,
+) -> HttpResponse {
+    //Validate the JWT token
+    let token_validation = validate_token(req, "server".to_string());
+    //Switch on the token validation result
+    match token_validation {
+        0 => {
+            // Establish a database connection
+            let mut conn = pool.get().expect("Couldn't get db connection from pool");
+
+            // Retrieve user from database
+            let user: User = match users::table
+                .filter(users::username.eq(&username_into.into_inner()))
+                .first(&mut conn)
+            {
+                Ok(user) => user,
+                Err(_) => {
+                    return HttpResponse::NotFound().body("User not found");
+                }
+            };
+
+            // Update user games played
+            match diesel::update(users::table.filter(users::id.eq(user.id)))
+                .set(users::nb_games.eq(user.nb_games + 1))
+                .execute(&mut conn)
+            {
+                Ok(_) => {
+                    HttpResponse::Ok().body("Games played updated successfully")
+                }
+                Err(_) => {
+                    return HttpResponse::BadRequest().body("Error updating user games played");
+                }
+            }
+        }
+        1 => HttpResponse::Unauthorized().body("Unauthorized"),
+        2 => HttpResponse::Forbidden().body("Permission denied"),
+        _ => HttpResponse::InternalServerError().body("Internal Server Error"),
+    }
+}
+
 
 fn validate_token(req: HttpRequest, role_value : String) -> i32 {
     let token =  match req

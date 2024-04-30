@@ -8,6 +8,7 @@ table! {
         password -> Varchar,
         salt -> Varchar,
         kda -> Float,
+        nb_games -> Int4,
         role_id -> Uuid,
         rank_id -> Uuid,
     }

@@ -16,6 +16,7 @@ pub struct User {
     pub password: String,
     pub salt: String,
     pub kda: f32,
+    pub nb_games: i32,
     pub role_id: Uuid, // Assuming you have a separate table for roles
     pub rank_id: Uuid, // Assuming you have a separate table for ranks
 }

@@ -47,6 +47,8 @@ async fn main() -> std::io::Result<()> {
             .route("/kda/{username_into}", web::get().to(handlers::get_kda))
             .route("/ranks", web::get().to(handlers::get_all_ranks))
             .route("/rank", web::put().to(handlers::update_rank))
+            .route("/nb_games/{username_into}", web::put().to(handlers::update_games_played))
+            .route("/nb_games/{username_into}", web::get().to(handlers::get_games_played))
     })
         .bind("0.0.0.0:8000")?
         .run()
