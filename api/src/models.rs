@@ -102,3 +102,8 @@ pub struct ConnectSession {
     pub session_id: Uuid,
     pub username: String,
 }
+
+#[derive(Debug, Serialize, Deserialize)]
+pub  struct AchievementsResponse {
+    pub  achievements: Vec<Achievement>,
+}
