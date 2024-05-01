@@ -671,6 +671,52 @@ pub async fn get_all_ranks(
     }
 }
 
+pub async fn get_rank(
+    req: HttpRequest,
+    pool: web::Data<DbPool>,
+    username_into: web::Path<String>,
+) -> HttpResponse {
+    // Validate the JWT token
+    let token_validation = validate_token(req, "all".to_string());
+
+    // Switch on the token validation result
+    match token_validation {
+        0 => {
+            // Establish a database connection
+            let mut conn = pool.get().expect("Couldn't get db connection from pool");
+
+            // Retrieve the user's rank
+            match users::table
+                .select(users::rank_id)
+                .filter(users::username.eq(&username_into.into_inner()))
+                .first::<Uuid>(&mut conn)
+            {
+                Ok(rank_id) => {
+                    // Retrieve the rank name
+                    match ranks::table
+                        .select(ranks::name)
+                        .filter(ranks::id.eq(rank_id))
+                        .first::<String>(&mut conn)
+                    {
+                        Ok(rank_name) => {
+                            HttpResponse::Ok().body(rank_name)
+                        }
+                        Err(_) => {
+                            HttpResponse::InternalServerError().body("Failed to retrieve rank name")
+                        }
+                    }
+                }
+                Err(_) => {
+                    HttpResponse::BadRequest().body("Invalid username")
+                }
+            }
+        }
+        1 => HttpResponse::Unauthorized().body("Unauthorized"),
+        2 => HttpResponse::Forbidden().body("Permission denied"),
+        _ => HttpResponse::InternalServerError().body("Internal Server Error"),
+    }
+}
+
 //Update user rank by user id
 pub async fn update_rank(
     req: HttpRequest,
