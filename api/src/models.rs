@@ -113,3 +113,17 @@ pub  struct AchievementsResponse {
 pub  struct RanksResponse {
     pub ranks: Vec<Rank>,
 }
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct FriendRequest {
+    pub username: String,
+    pub friend_username: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, diesel::Queryable)]
+pub struct FriendData {
+    pub username: String,
+    pub kda : f32,
+    pub nb_games: i32,
+    pub rank: Uuid,
+}

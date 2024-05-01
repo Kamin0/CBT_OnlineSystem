@@ -43,6 +43,18 @@ CREATE TABLE sessions (
     is_empty BOOLEAN DEFAULT TRUE
 );
 
+CREATE TABLE friends (
+    user_id UUID REFERENCES users(id),
+    friend_id UUID REFERENCES users(id),
+    PRIMARY KEY (user_id, friend_id)
+);
+
+CREATE Table friend_requests (
+    user_id UUID REFERENCES users(id),
+    friend_id UUID REFERENCES users(id),
+    PRIMARY KEY (user_id, friend_id)
+);
+
 INSERT INTO roles (name) VALUES ('server');
 INSERT INTO roles (name) VALUES ('client');
 

@@ -54,11 +54,27 @@ table! {
     }
 }
 
+table! {
+    friends (user_id, friend_id) {
+        user_id -> Uuid,
+        friend_id -> Uuid
+    }
+}
+
+table! {
+    friend_requests (user_id, friend_id) {
+        user_id -> Uuid,
+        friend_id -> Uuid,
+    }
+}
+
 joinable!(users -> roles (role_id));
 joinable!(users -> ranks (rank_id));
 joinable!(user_achievements -> users (user_id));
 joinable!(user_achievements -> achievements (achievement_id));
 joinable!(sessions -> ranks (average_rank));
+joinable!(friends -> users (friend_id));
+joinable!(friend_requests -> users (user_id));
 
 allow_tables_to_appear_in_same_query!(
     users,
@@ -73,4 +89,14 @@ allow_tables_to_appear_in_same_query!(
 allow_tables_to_appear_in_same_query!(
     user_achievements,
     achievements,
+);
+
+allow_tables_to_appear_in_same_query!(
+    users,
+    friends
+);
+
+allow_tables_to_appear_in_same_query!(
+    users,
+    friend_requests
 );

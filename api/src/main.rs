@@ -51,6 +51,11 @@ async fn main() -> std::io::Result<()> {
             .route("/nb_games/{username_into}", web::put().to(handlers::update_games_played))
             .route("/nb_games/{username_into}", web::get().to(handlers::get_games_played))
             .route("/get_ip",web::get().to(handlers::get_ip))
+            .route("/send_friend_request",web::post().to(handlers::send_friend_request))
+            .route("/accept_friend_request",web::post().to(handlers::accept_friend_request))
+            .route("/get_friends/{username_into}",web::get().to(handlers::get_friends))
+            .route("/get_friend_requests/{username_into}",web::get().to(handlers::get_pending_friend_requests))
+            .route("/friend",web::delete().to(handlers::remove_friend))
     })
         .bind("0.0.0.0:8000")?
         .run()

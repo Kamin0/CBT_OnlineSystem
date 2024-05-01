@@ -12,10 +12,8 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use web::Json;
 
-use crate::models::{Achievement, AchievementValidation, ConnectSession, DBSession, KdaUpdate, LoginUser,
-                    NewUser, Rank, RankUpdate, Session, SessionResponse, User, UserAchievement, 
-                    AchievementsResponse,RanksResponse};
-use crate::schema::{achievements, ranks, roles, sessions, user_achievements, users};
+use crate::models::{Achievement, AchievementValidation, ConnectSession, DBSession, KdaUpdate, LoginUser, NewUser, Rank, RankUpdate, Session, SessionResponse, User, UserAchievement, AchievementsResponse, RanksResponse, FriendRequest, FriendData};
+use crate::schema::{achievements, friend_requests, friends, ranks, roles, sessions, user_achievements, users};
 
 #[derive(Debug, Serialize, Deserialize)]
 struct Claims {
@@ -859,6 +857,293 @@ pub  async fn get_ip(
     }
 }
 
+//Send a friend request to a user by username
+pub async fn send_friend_request(
+    req: HttpRequest,
+    pool: Data<DbPool>,
+    user_data: Json<FriendRequest>
+) -> HttpResponse {
+    //Validate the JWT token
+    let token_validation = validate_token(req, "client".to_string());
+    //Switch on the token validation result
+    match token_validation {
+        0 => {
+            // Establish a database connection
+            let mut conn = pool.get().expect("Couldn't get db connection from pool");
+
+            let data = user_data.into_inner();
+            let user_id: Uuid = match users::table
+                .select(users::id)
+                .filter(users::username.eq(&data.username))
+                .first(&mut conn)
+            {
+                Ok(id) => id,
+                Err(_) => {
+                    return HttpResponse::BadRequest().body("Invalid username");
+                }
+            };
+
+            let friend_id: Uuid = match users::table
+                .select(users::id)
+                .filter(users::username.eq(&data.friend_username))
+                .first(&mut conn)
+            {
+                Ok(id) => id,
+                Err(_) => {
+                    return HttpResponse::BadRequest().body("Invalid friend username");
+                }
+            };
+
+            //Insert the friend request into the database
+            match diesel::insert_into(friend_requests::table)
+                .values((friend_requests::user_id.eq(user_id), friend_requests::friend_id.eq(friend_id)))
+                .execute(&mut conn)
+            {
+                Ok(_) => {
+                    HttpResponse::Ok().body("Friend request sent successfully")
+                }
+                Err(_) => {
+                    return HttpResponse::BadRequest().body("Error inserting friend request into database");
+                }
+            }
+        }
+        1 => HttpResponse::Unauthorized().body("Unauthorized"),
+        2 => HttpResponse::Forbidden().body("Permission denied"),
+        _ => HttpResponse::InternalServerError().body("Internal Server Error"),
+    }
+}
+
+//Accept a friend request by username
+pub async fn accept_friend_request(
+    req: HttpRequest,
+    pool: Data<DbPool>,
+    user_data: Json<FriendRequest>,
+) -> HttpResponse {
+    //Validate the JWT token
+    let token_validation = validate_token(req, "client".to_string());
+    //Switch on the token validation result
+    match token_validation {
+        0 => {
+            // Establish a database connection
+            let mut conn = pool.get().expect("Couldn't get db connection from pool");
+
+            let data = user_data.into_inner();
+            let user_id: Uuid = match users::table
+                .select(users::id)
+                .filter(users::username.eq(&data.username))
+                .first(&mut conn)
+            {
+                Ok(id) => id,
+                Err(_) => {
+                    return HttpResponse::BadRequest().body("Invalid username");
+                }
+            };
+
+            let friend_id: Uuid = match users::table
+                .select(users::id)
+                .filter(users::username.eq(&data.friend_username))
+                .first(&mut conn)
+            {
+                Ok(id) => id,
+                Err(_) => {
+                    return HttpResponse::BadRequest().body("Invalid friend username");
+                }
+            };
+
+                //Remove the friend request
+                match diesel::delete(friend_requests::table
+                    .filter(friend_requests::user_id.eq(friend_id))
+                    .filter(friend_requests::friend_id.eq(user_id)))
+                    .execute(&mut conn)
+                {
+                    Ok(_) => {
+                    }
+                    Err(_) => {
+                        return HttpResponse::BadRequest().body("Error removing friend request");
+                    }
+                }
+                //Add the friend
+                match diesel::insert_into(friends::table)
+                    .values((friends::user_id.eq(user_id), friends::friend_id.eq(friend_id)))
+                    .execute(&mut conn)
+                {
+                    Ok(_) => {
+                    }
+                    Err(_) => {
+                        return HttpResponse::BadRequest().body("Error inserting friend into database");
+                    }
+                }
+
+                //Add the friend
+                match diesel::insert_into(friends::table)
+                    .values((friends::user_id.eq(friend_id), friends::friend_id.eq(user_id)))
+                    .execute(&mut conn)
+                {
+                    Ok(_) => {
+                        HttpResponse::Ok().body("Friend request accepted successfully")
+                    }
+                    Err(_) => {
+                        return HttpResponse::BadRequest().body("Error inserting friend into database");
+                    }
+                }
+        }
+        1 => HttpResponse::Unauthorized().body("Unauthorized"),
+        2 => HttpResponse::Forbidden().body("Permission denied"),
+        _ => HttpResponse::InternalServerError().body("Internal Server Error"),
+    }
+}
+
+//Get all the friends of a user by username
+pub async fn get_friends(
+    req: HttpRequest,
+    pool: Data<DbPool>,
+    username_into: web::Path<String>,
+) -> HttpResponse {
+    //Validate the JWT token
+    let token_validation = validate_token(req, "client".to_string());
+    //Switch on the token validation result
+    match token_validation {
+        0 => {
+            // Establish a database connection
+            let mut conn = pool.get().expect("Couldn't get db connection from pool");
+
+            let user_id: Uuid = match users::table
+                .select(users::id)
+                .filter(users::username.eq(username_into.into_inner()))
+                .first(&mut conn)
+            {
+                Ok(id) => id,
+                Err(_) => {
+                    return HttpResponse::BadRequest().body("Invalid username");
+                }
+            };
+
+            // Retrieve all friends from database
+            let friends: Vec<FriendData> = friends::table
+                .inner_join(users::table)
+                .select((users::username, users::kda, users::nb_games,users::rank_id))
+                .filter(friends::user_id.eq(&user_id))
+                .load(&mut conn)
+                .expect("Error loading friends");
+
+            HttpResponse::Ok().json(friends)
+        }
+        1 => HttpResponse::Unauthorized().body("Unauthorized"),
+        2 => HttpResponse::Forbidden().body("Permission denied"),
+        _ => HttpResponse::InternalServerError().body("Internal Server Error"),
+    }
+}
+
+//Get all the pending friend requests of a user by username
+pub async fn get_pending_friend_requests(
+    req: HttpRequest,
+    pool: Data<DbPool>,
+    username_into: web::Path<String>,
+) -> HttpResponse {
+    //Validate the JWT token
+    let token_validation = validate_token(req, "client".to_string());
+    //Switch on the token validation result
+    match token_validation {
+        0 => {
+            // Establish a database connection
+            let mut conn = pool.get().expect("Couldn't get db connection from pool");
+
+            let user_id: Uuid = match users::table
+                .select(users::id)
+                .filter(users::username.eq(username_into.into_inner()))
+                .first(&mut conn)
+            {
+                Ok(id) => id,
+                Err(_) => {
+                    return HttpResponse::BadRequest().body("Invalid username");
+                }
+            };
+
+            // Retrieve all friends from database
+            let friends: Vec<FriendData> = friend_requests::table
+                .inner_join(users::table)
+                .select((users::username, users::kda, users::nb_games,users::rank_id))
+                .filter(friend_requests::friend_id.eq(&user_id))
+                .load(&mut conn)
+                .expect("Error loading friends");
+
+            HttpResponse::Ok().json(friends)
+        }
+        1 => HttpResponse::Unauthorized().body("Unauthorized"),
+        2 => HttpResponse::Forbidden().body("Permission denied"),
+        _ => HttpResponse::InternalServerError().body("Internal Server Error"),
+    }
+}
+
+//Remove a friend
+pub async fn remove_friend(
+    req: HttpRequest,
+    pool: Data<DbPool>,
+    user_data: Json<FriendRequest>,
+) -> HttpResponse {
+    //Validate the JWT token
+    let token_validation = validate_token(req, "client".to_string());
+    //Switch on the token validation result
+    match token_validation {
+        0 => {
+            // Establish a database connection
+            let mut conn = pool.get().expect("Couldn't get db connection from pool");
+
+            let data = user_data.into_inner();
+            let user_id: Uuid = match users::table
+                .select(users::id)
+                .filter(users::username.eq(&data.username))
+                .first(&mut conn)
+            {
+                Ok(id) => id,
+                Err(_) => {
+                    return HttpResponse::BadRequest().body("Invalid username");
+                }
+            };
+
+            let friend_id: Uuid = match users::table
+                .select(users::id)
+                .filter(users::username.eq(&data.friend_username))
+                .first(&mut conn)
+            {
+                Ok(id) => id,
+                Err(_) => {
+                    return HttpResponse::BadRequest().body("Invalid friend username");
+                }
+            };
+
+                //Remove the friend
+                match diesel::delete(friends::table
+                    .filter(friends::user_id.eq(user_id))
+                    .filter(friends::friend_id.eq(friend_id)))
+                    .execute(&mut conn)
+                {
+                    Ok(_) => {
+                    }
+                    Err(_) => {
+                        return HttpResponse::BadRequest().body("Error removing friend");
+                    }
+                }
+
+                //Remove the friend
+                match diesel::delete(friends::table
+                    .filter(friends::user_id.eq(friend_id))
+                    .filter(friends::friend_id.eq(user_id)))
+                    .execute(&mut conn)
+                {
+                    Ok(_) => {
+                        HttpResponse::Ok().body("Friend removed successfully")
+                    }
+                    Err(_) => {
+                        return HttpResponse::BadRequest().body("Error removing friend");
+                    }
+                }
+        }
+        1 => HttpResponse::Unauthorized().body("Unauthorized"),
+        2 => HttpResponse::Forbidden().body("Permission denied"),
+        _ => HttpResponse::InternalServerError().body("Internal Server Error"),
+    }
+}
 
 fn validate_token(req: HttpRequest, role_value : String) -> i32 {
     let token =  match req
