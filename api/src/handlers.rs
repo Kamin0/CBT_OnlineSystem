@@ -322,6 +322,29 @@ pub async fn connect_to_session(
                 Err(_) => return HttpResponse::InternalServerError().body("Failed to connect to Redis")
             }
 
+            //the session is full
+            if session.players.len() == 6 {
+                //Remove the session from the database
+                match diesel::delete(sessions::table
+                    .filter(sessions::id.eq(connection_data.session_id)))
+                    .execute(&mut conn)
+                {
+                    Ok(_) => {}
+                    Err(_) => {
+                        return HttpResponse::BadRequest().body("Error deleting session");
+                    }
+                }
+
+                //Remove the session from redis
+                match redis.get_ref().get_multiplexed_async_connection().await {
+                    Ok(mut con) => {
+                        let _: Result<(), RedisError> = con.del(connection_data.session_id.to_string()).await;
+                    }
+                    Err(_) => return HttpResponse::InternalServerError().body("Failed to connect to Redis")
+                }
+                return HttpResponse::Ok().body("Succesfully connected : Session full")
+            }
+
             //Get the kda of the player
             let kda: f32 = match users::table
                 .select(users::kda)
@@ -406,6 +429,49 @@ pub async fn connect_to_session(
                     return HttpResponse::BadRequest().body("Error updating session");
                 }
             }
+        }
+        1 => HttpResponse::Unauthorized().body("Unauthorized"),
+        2 => HttpResponse::Forbidden().body("Permission denied"),
+        _ => HttpResponse::InternalServerError().body("Internal Server Error"),
+    }
+}
+
+//Remove a session
+pub async fn remove_session(
+    req: HttpRequest,
+    pool: Data<DbPool>,
+    redis: Data<Client>,
+    session_id: web::Path<Uuid>,
+) -> HttpResponse {
+    //Validate the JWT token
+    let token_validation = validate_token(req, "server".to_string());
+    //Switch on the token validation result
+    match token_validation {
+        0 => {
+            // Establish a database connection
+            let mut conn = pool.get().expect("Couldn't get db connection from pool");
+
+            let session_id = session_id.into_inner();
+            //Remove the session from the database
+            match diesel::delete(sessions::table
+                .filter(sessions::id.eq(session_id)))
+                .execute(&mut conn)
+            {
+                Ok(_) => {}
+                Err(_) => {
+                    return HttpResponse::BadRequest().body("Error deleting session");
+                }
+            }
+
+            //Remove the session from redis
+            match redis.get_ref().get_multiplexed_async_connection().await {
+                Ok(mut con) => {
+                    let _: Result<(), RedisError> = con.del(session_id.to_string()).await;
+                }
+                Err(_) => return HttpResponse::InternalServerError().body("Failed to connect to Redis")
+            }
+
+            HttpResponse::Ok().body("Session removed successfully")
         }
         1 => HttpResponse::Unauthorized().body("Unauthorized"),
         2 => HttpResponse::Forbidden().body("Permission denied"),

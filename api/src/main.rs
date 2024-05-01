@@ -38,6 +38,7 @@ async fn main() -> std::io::Result<()> {
             .route("/login", web::post().to(handlers::login_user))
             .route("/session/{other_username}", web::get().to(handlers::request_session))
             .route("/session", web::post().to(handlers::register_session))
+            .route("/session/{session_id}", web::delete().to(handlers::remove_session))
             .route("/connect", web::post().to(handlers::connect_to_session))
             .route("/achievement", web::post().to(handlers::validate_achievement))
             .route("/achievement/{achievement_id}", web::get().to(handlers::get_achievement_by_id))
