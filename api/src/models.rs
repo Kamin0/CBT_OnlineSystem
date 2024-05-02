@@ -127,3 +127,8 @@ pub struct FriendData {
     pub nb_games: i32,
     pub rank: Uuid,
 }
+
+#[derive(Debug, Serialize, Deserialize, diesel::Queryable)]
+pub  struct FriendsResponse{
+    pub  friends: Vec<FriendData>,
+}

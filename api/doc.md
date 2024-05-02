@@ -1,22 +1,17 @@
+# Général
+  
+# Endpoints
+  
+
 
 ------------------------------------------------------------------------------------------
  
 ### Test Server Avaibility
 <details>
-<summary><code>GET</code> <code><b>/hello</b></code> ➡️ <code>{Ping server}</code></summary>
-
-Ping server
+<summary><code>GET</code> <code><b>/hello</b></code> ➡️ <code>{ALL : Ping server}</code></summary>
 
 #### Parameters
-
-
-> | name      |  type     | data type               | description                                                           |
-> |-----------|-----------|-------------------------|-----------------------------------------------------------------------|
-> | None      |  |    | N/A  |
-
-
-- Auth required** : NO
-- Permissions required: None
+- Auth required : None
 
 #### Success Response
 Code : `200 OK`
@@ -26,7 +21,6 @@ Hello, World !
 ```
 
 #### Error Responses
-
 - None
 
 </details>
@@ -36,8 +30,7 @@ Hello, World !
  
 ### Authentification
 <details>
-<summary><code>POST</code> <code><b>/register</b></code>  ➡️  <code>{Register Client or Server}</code></summary>
-
+<summary><code>POST</code> <code><b>/register</b></code>  ➡️  <code>{CLIENT & SERVER : Register Client or Server}</code></summary>
 
 #### Data constraints
 ```json
@@ -47,16 +40,13 @@ Hello, World !
   "password": "test0",
   "role_name": "client" OR "server"
 }
-
 ```
-
-- Auth required** : No
-- Permissions required: None
+- Auth required : None
 
 #### Success Response
 Code : `200 OK`
 ```json
-{"User registered successfully"}
+"User registered successfully"
 ```
 
 #### Error Responses
@@ -70,23 +60,22 @@ Code : `200 OK`
 </details>
 
 <details>
-<summary><code>POST</code> <code><b>/login</b></code>  ➡️ <code>Login as Client or Server</code></summary>
+<summary><code>POST</code> <code><b>/login</b></code>  ➡️ <code>{CLIENT & SERVER : Login}</code></summary>
 
 #### Data constraints
 ```json
 {
-  "username": "user",
-  "password": "password"
+  "username": "{user}",
+  "password": "{password}"
 }
 ```
 
-- Auth required : No
-- Permissions required: None
+- Auth required : None
 
 #### Success Response
 Code : `200 OK`
 ```json
-{token_client}
+{token_client} OR {token_server}
 ```
 
 #### Error Responses
@@ -96,7 +85,6 @@ Code : `200 OK`
 > | `400`         | `application/json`                | `Content type error`                                                |
 > | `400`         | `application/json`                | `Invalid username or password`                                      |
 > | `400`         | `application/json`                | `Invalid role id`                                                   |
-
 </details>
 
 ------------------------------------------------------------------------------------------
@@ -756,3 +744,5 @@ Content example
 > | `400`         | `application/json`                | `Invalid username`                                                  |
 > | `400`         | `application/json`                | `Unauthorized`                                                      |
 </details>
+
+

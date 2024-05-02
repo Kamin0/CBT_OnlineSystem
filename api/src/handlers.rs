@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use web::Json;
 
-use crate::models::{Achievement, AchievementValidation, ConnectSession, DBSession, KdaUpdate, LoginUser, NewUser, Rank, RankUpdate, Session, SessionResponse, User, UserAchievement, AchievementsResponse, RanksResponse, FriendRequest, FriendData};
+use crate::models::{Achievement, AchievementValidation, ConnectSession, DBSession, KdaUpdate, LoginUser, NewUser, Rank, RankUpdate, Session, SessionResponse, User, UserAchievement, AchievementsResponse, RanksResponse, FriendRequest, FriendData, FriendsResponse};
 use crate::schema::{achievements, friend_requests, friends, ranks, roles, sessions, user_achievements, users};
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -1092,7 +1092,8 @@ pub async fn get_friends(
                 .load(&mut conn)
                 .expect("Error loading friends");
 
-            HttpResponse::Ok().json(friends)
+            let friends_response = FriendsResponse{friends};
+            HttpResponse::Ok().json(friends_response)
         }
         1 => HttpResponse::Unauthorized().body("Unauthorized"),
         2 => HttpResponse::Forbidden().body("Permission denied"),
@@ -1133,7 +1134,8 @@ pub async fn get_pending_friend_requests(
                 .load(&mut conn)
                 .expect("Error loading friends");
 
-            HttpResponse::Ok().json(friends)
+            let friends_response = FriendsResponse{friends};
+            HttpResponse::Ok().json(friends_response)
         }
         1 => HttpResponse::Unauthorized().body("Unauthorized"),
         2 => HttpResponse::Forbidden().body("Permission denied"),

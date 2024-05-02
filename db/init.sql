@@ -67,4 +67,5 @@ INSERT INTO ranks (name, image_url) VALUES ('Diamond', 'https://via.placeholder.
 INSERT INTO users (username, email, password, salt, role_id, rank_id)
 VALUES ('server', 'server@uqac.ca', '$2y$12$zcm/bCwARboBGYvyTm.89u9G2qhqZL4Bm3ZKMkCI5G59P1/hS1geC', 'd5ea01744c824dda8321ac7456803eff', (SELECT id FROM roles WHERE name = 'server'),(SELECT id FROM ranks WHERE name = 'Bronze'));
 
-INSERT INTO achievements (name, description, image_url) VALUES ('First connection', 'You have successfully connected to the server for the first time.', 'https://via.placeholder.com/150');
+INSERT INTO achievements (name, description, image_url) VALUES ('Ten Kills', 'You killed 10 times in a game', 'https://via.placeholder.com/150');
+INSERT INTO achievements (name, description, image_url) VALUES ('First Death', 'Your first death', 'https://via.placeholder.com/150');
